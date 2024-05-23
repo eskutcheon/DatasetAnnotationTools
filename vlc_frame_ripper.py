@@ -16,10 +16,10 @@ class Ripper:
     vid_path: str
     frames_path: str
     num_frames: int
-    start_time: float
-    end_time: float
-    time_step: float
-    duration: float
+    start_time: int
+    end_time: int
+    time_step: int
+    duration: int
 
 
 # borrowed from the main repo just in case there's danger of redownloading a bunch
@@ -37,19 +37,19 @@ def read_cli():
     parser.add_argument('--num_frames', type=int, default=None, help='total number of frames to extract')
     parser.add_argument('--start_time', type=float, default=0, help='start time in seconds')
     parser.add_argument('--end_time', type=float, default=None, help='end time in seconds')
-    parser.add_argument('--time_step', type=float, default=1, help='time step between extracted frames in seconds')
+    parser.add_argument('--time_step', type=float, default=1000, help='time step between extracted frames in seconds')
     return parser.parse_args()
 
 def sanitize_inputs(args: argparse.Namespace, vid_duration) -> Ripper:
     """ input namespace from above parser and output sanitized inputs in a dataclass """
     def bound_times(val, t1, t2):
-        return round(np.clip([val], t1, t2)[0], 3)
+        return int(np.clip([val], t1, t2).astype(int)[0])
 
     # ? NOTE: all times are in milliseconds
     # initialize the dataclass with the parser (converted to dict then unpacked) then sanitize its values
     params = Ripper(**vars(args), duration=vid_duration)
     # adjusting vid_duration slightly so that extract_frames can read the last frame index - had to experiment w/ this
-    vid_duration -= 10e-1 # time in seconds formatted as #.### minus 0.1 seconds
+    vid_duration -= 1 # time in milliseconds formatted as an int
     # if the start time is somehow negative or greater than the actual video duration, clip to correct interval
     params.start_time = bound_times(params.start_time, 0, vid_duration)
     # if end_time not specified, set to end of video, else clip to correct interval
@@ -57,28 +57,28 @@ def sanitize_inputs(args: argparse.Namespace, vid_duration) -> Ripper:
         params.end_time = vid_duration
     else:
         params.end_time = bound_times(params.end_time, 0, vid_duration)
-    if params.end_time < params.start_time:
+    if params.end_time <= params.start_time:
         raise ValueError(f"end_time cannot be greater than the start time; got {params.end_time} and {params.start_time}, respectively")
     # duration of interval meant to be read may be different than vid_duration
     read_duration = params.end_time - params.start_time
     if params.num_frames is None:
         # if num_frames wasn't specified and time_step is given
-        if not (10e-2 <= params.time_step <= read_duration):
+        if params.time_step > read_duration:
             # time_step must be at most end-start with at least 2 frames
-            params.time_step = bound_times(params.time_step, 10e-2, read_duration)
+            params.time_step = bound_times(params.time_step, 10, read_duration)
             print(f"time step not in range; adjusting to time_step={params.time_step}")
         params.num_frames = min(int(read_duration/params.time_step) + 1, MAX_NUM_FRAMES)
     else:
         # if num_frames was specified, assume it takes precedence over any specified time_step
-        params.num_frames = int(np.clip([params.num_frames], 2, MAX_NUM_FRAMES)[0])
+        params.num_frames = bound_times(params.num_frames, 2, MAX_NUM_FRAMES)
     # FIXME: messed up the logic a little so that time_step changes whether it's valid or not - num_frames works though
-    params.time_step = read_duration/(params.num_frames - 1) if params.num_frames > 1 else read_duration
-    params.time_step = round(params.time_step, 3)
+    params.time_step = int(read_duration/(params.num_frames - 1)) if params.num_frames > 1 else read_duration
     print(f"Number of frames to be extracted: {params.num_frames} (with time step {params.time_step})")
     return params
 
 
 def get_video_duration(vid_path):
+    # initialize VLC instance without console output
     instance = vlc.Instance('--quiet', '--no-video-title-show', '--intf', 'dummy')
     media = instance.media_new(vid_path)
     media.parse_with_options(vlc.MediaParseFlag.network, -1)
@@ -87,11 +87,11 @@ def get_video_duration(vid_path):
     duration = media.get_duration()
     if duration == -1:
         raise ValueError("Could not retrieve video duration.")
-    return duration/1000
+    return duration
 
 
 def extract_frames(ripper):
-    # initialize VLC instance
+    # initialize VLC instance without console output
     instance = vlc.Instance('--quiet', '--no-video-title-show', '--intf', 'dummy')
     player = instance.media_player_new()
     media = instance.media_new(ripper.vid_path)
@@ -101,13 +101,12 @@ def extract_frames(ripper):
     time.sleep(1)
     # get frame indices to extract
     # FIXME: need to change the logic for dealing with either a time step or a constant number of frames to use
-    frame_times = np.linspace(ripper.start_time, ripper.end_time, ripper.num_frames)
+    frame_times = np.arange(ripper.start_time, ripper.end_time + 1, step=ripper.time_step)
     with tqdm(total=ripper.num_frames, desc="Iterating over frames") as pbar:
         for idx, frame_time in enumerate(frame_times):
-            timestamp = int(1000*frame_time) # in milliseconds
-            frame_filepath = os.path.join(ripper.frames_path, f"frame_{timestamp}.png")
+            frame_filepath = os.path.join(ripper.frames_path, f"frame_{frame_time}.png")
             # seek to the specific time
-            player.set_time(timestamp)
+            player.set_time(frame_time)
             time.sleep(1)  # giving 1 second for the frame to render
             frame = player.video_take_snapshot(0, frame_filepath, 0, 0)
             pbar.update()
