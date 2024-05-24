@@ -92,6 +92,7 @@ def get_video_duration(vid_path):
 
 def extract_frames(ripper):
     # initialize VLC instance without console output
+    # add '--no-xlib' to suppress window appearing
     instance = vlc.Instance('--quiet', '--no-video-title-show', '--intf', 'dummy')
     player = instance.media_player_new()
     media = instance.media_new(ripper.vid_path)
@@ -116,7 +117,9 @@ def extract_frames(ripper):
     player.stop()
     print(f"FINISHED: Frames extracted and saved to {ripper.frames_path}")
 
-
+# borrowed from main project's utils
+def get_matching_filenames(input_dir, substr):
+    return list(filter(lambda x: (substr in x) and (not os.path.isdir(os.path.join(input_dir, x))), os.listdir(input_dir)))
 
 if __name__ == "__main__":
     args = read_cli()
@@ -135,10 +138,14 @@ if __name__ == "__main__":
     duration = get_video_duration(args.vid_path)
     ripper = sanitize_inputs(args, duration)
     # save parameters to JSON for documentation
-    with open(os.path.join(os.path.dirname(args.vid_path), "frame_rip_metadata.json"), 'w') as fptr:
+    metadata_path = os.path.join(os.path.dirname(args.vid_path), "frame_rip_metadata.json")
+    if os.path.exists(metadata_path):
+        filename_base = os.path.splitext(os.path.basename(metadata_path))[0]
+        parent_dir = os.path.dirname(metadata_path)
+        new_filename = f"{filename_base}_{len(get_matching_filenames(parent_dir, filename_base)) + 1}.json"
+        metadata_path = os.path.join(parent_dir, new_filename)
+    with open(metadata_path, 'w') as fptr:
         json.dump(asdict(ripper), fptr, indent=4)
     extract_frames(ripper)
-
-
 
 # ? NOTE: still don't have access to FFMPEG since IT is kinda incompetent

@@ -14,8 +14,8 @@ download_video() {
         --write-info-json \
         --write-description \
         --restrict-filenames \
-        -f "mp4 best" \
-        -o "videos/%(id)s/%(id)s.mp4" \
+        #-f "mp4 best" \
+        -o "videos/%(id)s/%(id)s.%(ext)s" \
         "${flags[@]}"
 }
 

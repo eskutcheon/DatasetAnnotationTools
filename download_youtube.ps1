@@ -12,7 +12,7 @@ function Download-Video {
     )
 
     # Build the youtube-dl command
-    $command = "youtube-dl $videoUrl --hls-prefer-ffmpeg --write-info-json --write-description --restrict-filenames -f mp4 best -o `""videos/%(id)s/%(id)s.mp4`""
+    $command = "youtube-dl $videoUrl --hls-prefer-ffmpeg --write-info-json --write-description --restrict-filenames -o `""videos/%(id)s/%(id)s.%(ext)s`""
     $flagsString = $flags -join " "
     $fullCommand = "$command $flagsString"
 
