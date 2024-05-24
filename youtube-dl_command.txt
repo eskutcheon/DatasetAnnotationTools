@@ -1,0 +1,1 @@
+youtube-dl "<video url>" --hls-prefer-ffmpeg --write-info-json --write-description --restrict-filenames -f mp4 best -o "videos/%(id)s/%(id)s.mp4"
